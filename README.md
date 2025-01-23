@@ -1,2 +1,2 @@
-# MySQL-Project
+# PortfolioProjects
 Project in MySQL created for my portfolio
