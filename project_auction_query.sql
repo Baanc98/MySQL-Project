@@ -1,0 +1,427 @@
+USE project_auction;
+
+
+# |-----------Adjust data to import------------|
+SHOW FULL COLUMNS FROM lotes_final;
+
+ALTER TABLE lotes_final
+MODIFY COLUMN ADMON INT;
+
+ALTER TABLE lotes_final
+MODIFY COLUMN PESOTOT INT;  -- Change to a compatible type if needed
+
+ALTER TABLE lotes
+MODIFY COLUMN PROCEDE VARCHAR(255) CHARACTER SET utf8mb4;
+
+
+# |----------Import the data------------|
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/lotes_final.csv' INTO TABLE lotes_final
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+SELECT *
+FROM lotes_final
+ORDER BY 1 ASC;
+
+SELECT count(*)
+FROM lotes_final;
+
+
+# |----------Import the data of costumers------------|
+
+CREATE TABLE customers (
+	NITV bigint,
+    DV VARCHAR(255),
+    NOMBREV VARCHAR(255),
+    APELLIDOSV VARCHAR(255),
+    CONTACTOV VARCHAR(255),
+    REFERENCIA VARCHAR(255),
+    DIRECCIONV VARCHAR(255),
+    DEPTOV VARCHAR(255),
+    MUNICIPIOV VARCHAR(255),
+    TELEFONOV int,
+    FAXV VARCHAR(255),
+    EMAILV VARCHAR(255),
+    TIPOCLTE VARCHAR(255),
+    NOTASV VARCHAR(255),
+    HACIENDA VARCHAR(255),
+    MUNICIPIOH VARCHAR(255)
+);
+
+ALTER TABLE customers
+MODIFY COLUMN TELEFONOV VARCHAR(255);
+
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/customer.csv' INTO TABLE customers
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+SELECT *
+FROM customers;
+
+SELECT *
+FROM lotes_final;
+
+
+# ------------- Join lotes_final and customers to add names instead of IDs-----------------
+ALTER TABLE lotes_final
+ADD COLUMN NAME_SELLER VARCHAR(255)
+AFTER NITV;
+
+ALTER TABLE lotes_final
+ADD COLUMN NAME_BUYER VARCHAR(255)
+AFTER NITC;
+
+UPDATE lotes_final lo
+JOIN customers cu
+	ON lo.NITV = cu.NITV
+SET lo.name_seller = CONCAT(cu.NOMBREV, " ", cu.APELLIDOSV)
+WHERE lo.NITV = cu.NITV
+;
+
+UPDATE lotes_final lo
+JOIN customers cu
+	ON lo.NITC = cu.NITV
+SET lo.name_buyer = CONCAT(cu.NOMBREV, " ", cu.APELLIDOSV)
+WHERE lo.NITC = cu.NITV
+;
+
+
+# ----------- DELETE COLUMNS NOT NEEDED ------------
+#Columns ORDENSAL, NROCORRAL, HORAENT, NITV, NITC, NROFACTURA, ASISTEC, NROFVENDOR, NOTAMILLO, LICENCIA are not needed
+ALTER TABLE lotes_final
+DROP COLUMN ORDENSAL, 
+DROP COLUMN NROCORRAL, 
+DROP COLUMN HORAENT, 
+DROP COLUMN NITV, 
+DROP COLUMN NITC, 
+DROP COLUMN NROFACTURA, 
+DROP COLUMN ASISTEC, 
+DROP COLUMN NROFVENDOR, 
+DROP COLUMN NOTAMTILLO, 
+DROP COLUMN LICENCIA,
+DROP COLUMN PROCEDE;
+
+
+# ------------- Standardize data ----------------
+SELECT *
+FROM lotes_final;
+
+SELECT DISTINCT(NAME_SELLER)
+FROM lotes_final
+ORDER BY 1 ASC;
+
+UPDATE lotes_final 
+SET NAME_SELLER = TRIM(NAME_SELLER),
+MUNICIPIOH = TRIM(MUNICIPIOH),
+NAME_BUYER = TRIM(NAME_BUYER);
+
+
+-- Fill blank dates
+SELECT *
+FROM lotes_final
+WHERE FECHAENT = '';
+
+UPDATE lotes_final
+SET FECHAENT = NULL
+WHERE FECHAENT = '';
+
+SELECT *
+FROM lotes_final
+WHERE FECHAENT IS NULL;
+
+START TRANSACTION;
+
+-- Create temporary table which we'll use to join and fill the data of the missing dates we could fill 
+CREATE TEMPORARY TABLE temp_date
+SELECT NROSUBASTA, MIN(NROLOTE) AS NROLOTE , MIN(FECHAENT) AS FECHAENT
+FROM lotes_final
+WHERE FECHAENT IS NOT NULL
+GROUP BY NROSUBASTA;
+
+SELECT * 
+FROM temp_date;
+
+UPDATE lotes_final lf
+JOIN temp_date td
+	ON lf.NROSUBASTA = td.NROSUBASTA
+SET lf.FECHAENT = td.FECHAENT
+WHERE lf.FECHAENT IS NULL
+;
+
+DROP TEMPORARY TABLE temp_date;
+
+COMMIT;
+
+SELECT FECHAENT, str_to_date(FECHAENT, '%m/%d/%Y')
+FROM lotes_final;
+
+UPDATE lotes_final
+SET FECHAENT = str_to_date(FECHAENT, '%m/%d/%Y'); -- Changing the date to the MYSQL structure
+
+ALTER TABLE lotes_final -- Changing the data type from TEXT to DATE
+MODIFY COLUMN FECHAENT DATE;
+
+SELECT *
+FROM lotes_final;
+
+UPDATE lotes_final -- Make sure all values are in upper case
+SET MUNICIPIOH = UPPER(MUNICIPIOH)
+;
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+ORDER BY 1 ASC;
+
+SELECT DISTINCT MUNICIPIOH -- From here we made sure there were no duplicate values with different names for better visualization later
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "%puert%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "puerto valdivia"
+WHERE MUNICIPIOH LIKE "%puert%"
+;
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "val%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "VALDIVIA"
+WHERE MUNICIPIOH LIKE "val%";
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "BRI%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "BRICEÑO"
+WHERE MUNICIPIOH LIKE "BRI%";
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "CEDE%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "CEDEÑO"
+WHERE MUNICIPIOH LIKE "CEDE%";
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "CHOR%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "CHORRILLOS"
+WHERE MUNICIPIOH LIKE "CHOR%";
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "%CEDR%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "CEDRO"
+WHERE MUNICIPIOH LIKE "%CEDR%";
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "%12%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "EL DOCE"
+WHERE MUNICIPIOH LIKE "%12%";
+
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "%PAU%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "LA PAULINA"
+WHERE MUNICIPIOH LIKE "%PAU%";
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "%BLANCO%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "MONTEBLANCO"
+WHERE MUNICIPIOH LIKE "%BLANCO%";
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "%PLA%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "PLANETA RICA"
+WHERE MUNICIPIOH LIKE "%PLA%";
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "%PTO%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "PUERTO VALDIVIA"
+WHERE MUNICIPIOH LIKE "%PTO%";
+
+UPDATE lotes_final
+SET MUNICIPIOH = "PUERTO VALDIVIA"
+WHERE MUNICIPIOH LIKE "%PUER%";
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "%RAUDA%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "RAUDAL VIEJO"
+WHERE MUNICIPIOH LIKE "%RAUDA%";
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "%ROSA%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "SANTA ROSA"
+WHERE MUNICIPIOH LIKE "%ROSA%";
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "%TARAZ%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "TARAZA"
+WHERE MUNICIPIOH LIKE "%TARAZ%";
+
+SELECT DISTINCT MUNICIPIOH
+FROM lotes_final
+WHERE MUNICIPIOH LIKE "%YARU%"
+;
+
+UPDATE lotes_final
+SET MUNICIPIOH = "YARUMAL"
+WHERE MUNICIPIOH LIKE "%YARU%";
+
+SELECT *
+FROM lotes_final;
+
+
+# -------- Delete null/blank values --------- 
+SELECT  *
+FROM lotes_final
+WHERE NROLOTE IS NULL
+OR NROLOTE = ""
+ORDER BY 1
+;
+
+DELETE FROM lotes_final
+WHERE NROLOTE IS NULL
+OR NROLOTE = ""
+;
+
+SELECT  *
+FROM lotes_final
+WHERE NROANIMAL IS NULL
+OR NROANIMAL = ""
+ORDER BY 1
+;
+
+DELETE FROM lotes_final
+WHERE NROANIMAL IS NULL
+OR NROANIMAL = ""
+;
+
+SELECT  *
+FROM lotes_final
+WHERE SEXO IS NULL
+OR SEXO = ""
+ORDER BY 1
+;
+
+DELETE FROM lotes_final
+WHERE SEXO IS NULL
+OR SEXO = ""
+;
+
+SELECT  *
+FROM lotes_final
+WHERE UNIDAD IS NULL
+OR UNIDAD = ""
+ORDER BY 1
+;
+
+DELETE FROM lotes_final
+WHERE UNIDAD IS NULL
+OR UNIDAD = ""
+;
+
+
+START TRANSACTION;
+
+SELECT *
+FROM lotes_final
+WHERE NAME_SELLER IS NULL
+OR NAME_SELLER = ""
+ORDER BY 1
+;
+
+SELECT  *
+FROM lotes_final
+WHERE NAME_BUYER IS NULL
+OR NAME_BUYER = ""
+ORDER BY 1;
+
+DELETE FROM lotes_final
+WHERE NAME_SELLER IS NULL
+OR NAME_SELLER = ""
+;
+
+DELETE FROM lotes_final
+WHERE NAME_BUYER IS NULL
+OR NAME_BUYER = ""
+;
+
+COMMIT;
+
+# ---------- Preparation -------------
+# For better analysis and visualization later we add two new columns, one for total comission (ADMON + COMISION + IVACOMIS), and another if buyer is the same as seller
+
+SELECT * 
+FROM lotes_final;
+
+ALTER TABLE lotes_final
+ADD COLUMN TOTAL_COMISSION INT;
+
+ALTER TABLE lotes_final
+ADD COLUMN AUTOSUBASTA VARCHAR(100);
+
+UPDATE lotes_final
+SET TOTAL_COMISSION = ADMON + COMISION + IVACOMIS;
+
+UPDATE lotes_final
+SET AUTOSUBASTA = CASE 
+	WHEN NAME_SELLER = NAME_BUYER THEN 'Autosubasta'
+    ELSE 'Venta'
+END;
+
+
+
+
+
+
+
